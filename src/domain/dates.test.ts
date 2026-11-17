@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   addLocalDays,
+  addLocalMonths,
   calendarGrid,
   combineLocalDateTime,
   dateKey,
   formatClock,
   formatFileStamp,
+  formatFullDay,
   formatGroupTitle,
   localDayRange,
   localMonthRange,
@@ -81,6 +83,18 @@ describe("formatClock / formatFileStamp", () => {
 
   it("输出文件名时间戳", () => {
     expect(formatFileStamp(at(2026, 11, 17, 21, 40))).toBe("20261117-2140");
+  });
+});
+
+describe("formatFullDay / addLocalMonths", () => {
+  it("筛选标题始终带年份与星期", () => {
+    expect(formatFullDay(at(2026, 11, 17, 21, 40))).toBe("2026年11月17日 周二");
+  });
+
+  it("月份切换可跨年", () => {
+    expect(addLocalMonths(2026, 12, 1)).toEqual({ year: 2027, month: 1 });
+    expect(addLocalMonths(2027, 1, -1)).toEqual({ year: 2026, month: 12 });
+    expect(addLocalMonths(2026, 11, 0)).toEqual({ year: 2026, month: 11 });
   });
 });
 

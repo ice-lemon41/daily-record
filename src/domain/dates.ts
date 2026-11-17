@@ -59,6 +59,22 @@ export function formatClock(ts: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** 筛选 chip / 日历标题用：YYYY年M月D日 周X，始终带年份。 */
+export function formatFullDay(ts: number): string {
+  const date = new Date(ts);
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${weekdayLabel(ts)}`;
+}
+
+/** 按本地日历加减月份，返回 1–12 的月份与年份。 */
+export function addLocalMonths(
+  year: number,
+  month: number,
+  delta: number,
+): { year: number; month: number } {
+  const date = new Date(year, month - 1 + delta, 1);
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+
 export interface LocalDateTimeParts {
   /** YYYY-MM-DD，可直接用于 <input type="date">。 */
   date: string;
