@@ -1,4 +1,6 @@
+import { DRAFT_KV_KEY, LAST_IMPORT_AT_KV_KEY, SCHEMA_VERSION_KV_KEY } from "../../domain/constants";
 import type { ExportSource } from "../../domain/export-json";
+import type { MarkdownSource } from "../../domain/export-markdown";
 import { parseMetrics } from "../../domain/parse-metrics";
 import { parseTags } from "../../domain/parse-tags";
 import type { ExportBundle } from "../../domain/types";
@@ -35,6 +37,18 @@ export async function loadExportSource(db: AppDb, exportedAt = Date.now()): Prom
     db.metrics.toArray(),
   ]);
   return { entries, metrics, exportedAt };
+}
+
+/** Markdown 导出快照：未删除条目 + 它们的指标快照。 */
+export async function loadMarkdownSource(
+  db: AppDb,
+  exportedAt = Date.now(),
+): Promise<MarkdownSource> {
+  const entries = await db.entries.where("deletedAt").equals(0).toArray();
+  const ids = entries.map((entry) => entry.id);
+  const metricValues =
+    ids.length === 0 ? [] : await db.entryMetrics.where("entryId").anyOf(ids).toArray();
+  return { entries, metricValues, exportedAt };
 }
 
 /**
@@ -143,9 +157,9 @@ export async function replaceAllData(
         await db.entryMetrics.bulkPut(rows.entryMetricRows);
       }
 
-      await db.kv.delete("draft");
-      await setKv(db, "schemaVersion", bundle.schemaVersion);
-      await setKv(db, "lastImportAt", now);
+      await db.kv.delete(DRAFT_KV_KEY);
+      await setKv(db, SCHEMA_VERSION_KV_KEY, bundle.schemaVersion);
+      await setKv(db, LAST_IMPORT_AT_KV_KEY, now);
     },
   );
 

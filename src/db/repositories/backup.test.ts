@@ -5,7 +5,7 @@ import { parseImportJson } from "../../domain/import-json";
 import type { ExportBundle } from "../../domain/types";
 import { type AppDb, createDb } from "../db";
 import type { EntryRow } from "../schema";
-import { ImportDataError, loadExportSource, replaceAllData } from "./backup";
+import { ImportDataError, loadExportSource, loadMarkdownSource, replaceAllData } from "./backup";
 import { createEntry, deleteEntry } from "./entries";
 import { getKv, setKv } from "./kv";
 import { createMetric } from "./metrics";
@@ -83,6 +83,35 @@ describe("loadExportSource", () => {
     expect(source.entries.map((entry) => entry.id).sort()).toEqual([entryId, secondId].sort());
     expect(source.entries.some((entry) => entry.id === deletedId)).toBe(false);
     expect(source.metrics.map((metric) => metric.id)).toEqual([metricId]);
+  });
+});
+
+describe("loadMarkdownSource", () => {
+  it("只取未删除条目及其指标快照", async () => {
+    await createMetric(db, { name: "体重", unit: "kg" }, 1000);
+    const kept = await createEntry(db, {
+      content: "今天 体重 70kg",
+      occurredAt: T1,
+      now: 2000,
+    });
+    const removed = await createEntry(db, {
+      content: "昨天 体重 80kg",
+      occurredAt: T2,
+      now: 1500,
+    });
+    await deleteEntry(db, removed.entry.id, 3000);
+
+    const source = await loadMarkdownSource(db, T1);
+
+    expect(source.exportedAt).toBe(T1);
+    expect(source.entries.map((entry) => entry.id)).toEqual([kept.entry.id]);
+    expect(source.metricValues).toHaveLength(1);
+    expect(source.metricValues[0]).toMatchObject({
+      entryId: kept.entry.id,
+      nameSnapshot: "体重",
+      value: 70,
+      unit: "kg",
+    });
   });
 });
 

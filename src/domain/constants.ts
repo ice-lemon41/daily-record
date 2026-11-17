@@ -42,5 +42,11 @@ export const PAGE_SIZE = 50;
 export const DRAFT_KV_KEY = "draft";
 export const DRAFT_DEBOUNCE_MS = 300;
 
+/** 备份相关 kv 键与导入上限（PRD FR-10 / FR-12）。 */
+export const LAST_EXPORT_AT_KV_KEY = "lastExportAt";
+export const SCHEMA_VERSION_KV_KEY = "schemaVersion";
+export const LAST_IMPORT_AT_KV_KEY = "lastImportAt";
+export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+
 /** 导出文件名前缀，例如 daily-record-20261117-2140.json。 */
 export const EXPORT_FILE_PREFIX = "daily-record";
