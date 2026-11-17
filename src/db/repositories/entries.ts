@@ -1,4 +1,5 @@
 import { DRAFT_KV_KEY, PAGE_SIZE } from "../../domain/constants";
+import { localDayRange } from "../../domain/dates";
 import {
   filterIgnoredSuggestions,
   type MetricDefinition,
@@ -293,7 +294,7 @@ export async function listMetricValuesForEntries(
   return grouped;
 }
 
-/** 关键词搜索：正文不区分大小写。10k 基准见 src/db/bench。 */
+/** 关键词搜索：正文不区分大小写；同时匹配标签名（PRD FR-07-1）。 */
 export async function searchEntries(
   db: AppDb,
   keyword: string,
@@ -305,7 +306,19 @@ export async function searchEntries(
   // 不用 Dexie 的 Collection.filter：fake-indexeddb 下 10k 条会退化成分钟级；
   // 直接取回后内存过滤，10k 实测约 50ms（见 src/db/bench）。
   const rows = await db.entries.where("deletedAt").equals(0).toArray();
-  const items = rows.filter((entry) => entry.content.toLowerCase().includes(needle));
+
+  const tagIds = (await db.tags.toArray())
+    .filter((tag) => tag.name.toLowerCase().includes(needle))
+    .map((tag) => tag.id);
+  const tagEntryIds = new Set<string>();
+  if (tagIds.length > 0) {
+    const links = await db.entryTags.where("tagId").anyOf(tagIds).toArray();
+    for (const link of links) tagEntryIds.add(link.entryId);
+  }
+
+  const items = rows.filter(
+    (entry) => entry.content.toLowerCase().includes(needle) || tagEntryIds.has(entry.id),
+  );
 
   items.sort(
     (a, b) => b.occurredAt - a.occurredAt || b.createdAt - a.createdAt || b.id.localeCompare(a.id),
@@ -321,6 +334,16 @@ export async function listEntriesBetween(
   endExclusive: number,
 ): Promise<EntryRow[]> {
   return db.entries.where(DAY_INDEX).between([0, start], [0, endExclusive], true, false).toArray();
+}
+
+/** 按本地自然日筛选，按发生时间倒序（PRD FR-06-3）。 */
+export async function listEntriesForDay(db: AppDb, dayStart: number): Promise<EntryRow[]> {
+  const { start, end } = localDayRange(dayStart);
+  const rows = await listEntriesBetween(db, start, end);
+  rows.sort(
+    (a, b) => b.occurredAt - a.occurredAt || b.createdAt - a.createdAt || b.id.localeCompare(a.id),
+  );
+  return rows;
 }
 
 export interface TagCursor {

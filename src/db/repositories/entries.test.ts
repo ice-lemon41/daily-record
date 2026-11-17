@@ -10,6 +10,7 @@ import {
   getEntry,
   listEntriesBetween,
   listEntriesByTag,
+  listEntriesForDay,
   listMetricValuesForEntries,
   listPinnedEntries,
   listTimeline,
@@ -303,6 +304,36 @@ describe("listEntriesBetween", () => {
   });
 });
 
+describe("listEntriesForDay", () => {
+  it("只返回指定本地日期，按发生时间倒序且跳过软删除", async () => {
+    await createEntry(db, {
+      content: "当天早",
+      occurredAt: at(2026, 11, 17, 8, 0),
+      now: NOW,
+    });
+    await createEntry(db, {
+      content: "当天晚",
+      occurredAt: at(2026, 11, 17, 22, 0),
+      now: NOW,
+    });
+    await createEntry(db, {
+      content: "前一天",
+      occurredAt: at(2026, 11, 16, 23, 59),
+      now: NOW,
+    });
+    const deleted = await createEntry(db, {
+      content: "当天已删",
+      occurredAt: at(2026, 11, 17, 12, 0),
+      now: NOW,
+    });
+    await deleteEntry(db, deleted.entry.id);
+
+    const items = await listEntriesForDay(db, at(2026, 11, 17, 15, 0));
+
+    expect(items.map((entry) => entry.content)).toEqual(["当天晚", "当天早"]);
+  });
+});
+
 describe("listEntriesByTag", () => {
   it("未知标签返回空结果", async () => {
     expect(await listEntriesByTag(db, "不存在")).toEqual({
@@ -407,6 +438,20 @@ describe("searchEntries", () => {
 
     const all = await searchEntries(db, "记");
     expect(all.map((entry) => entry.content)).toEqual(["Meeting 记录"]);
+  });
+
+  it("匹配标签名，且正文与标签同时命中只返回一次", async () => {
+    const tagged = await createEntry(db, { content: "跑步", occurredAt: 1, now: 1 });
+    const tagId = crypto.randomUUID();
+    await db.tags.add({ id: tagId, name: "健康" });
+    await db.entryTags.add({ entryId: tagged.entry.id, tagId, occurredAt: 1 });
+
+    const both = await createEntry(db, { content: "#健康 早睡", occurredAt: 2, now: 2 });
+
+    const result = await searchEntries(db, "健康");
+    expect(result.map((entry) => entry.id).sort()).toEqual(
+      [tagged.entry.id, both.entry.id].sort(),
+    );
   });
 
   it("跳过软删除条目，忽略空关键词", async () => {
