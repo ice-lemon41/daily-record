@@ -8,6 +8,7 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     env: { TZ: "Asia/Shanghai" },
     include: ["src/**/*.test.{ts,tsx}"],
+    exclude: ["**/node_modules/**", "**/dist/**", "**/*.bench.test.*"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
