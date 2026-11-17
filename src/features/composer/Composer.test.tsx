@@ -7,7 +7,7 @@ import { createMetric } from "../../db/repositories/metrics";
 import { DRAFT_KV_KEY } from "../../domain/constants";
 import { formatClock } from "../../domain/dates";
 import { cleanupTestDbs, makeTestDb } from "../../test/db";
-import { Composer } from "./Composer";
+import { type BackfillRequest, Composer } from "./Composer";
 
 function at(year: number, month: number, day: number, hour = 0, minute = 0): number {
   return new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
@@ -15,10 +15,10 @@ function at(year: number, month: number, day: number, hour = 0, minute = 0): num
 
 const NOW = at(2026, 11, 17, 21, 40);
 
-function renderComposer(database: AppDb) {
+function renderComposer(database: AppDb, backfillRequest: BackfillRequest | null = null) {
   return render(
     <ToastProvider>
-      <Composer database={database} now={NOW} />
+      <Composer database={database} now={NOW} backfillRequest={backfillRequest} />
     </ToastProvider>,
   );
 }
@@ -130,6 +130,36 @@ describe("Composer", () => {
     const [entry] = await database.entries.toArray();
     expect(entry?.occurredAt).toBe(at(2026, 11, 16, 9, 30));
     expect(screen.getByRole("button", { name: `现在 ${formatClock(NOW)}` })).toBeInTheDocument();
+  });
+
+  it("收到补记请求后设为指定日期并聚焦输入框，提交后条目落在该天", async () => {
+    const database = makeTestDb();
+    const { rerender } = renderComposer(database);
+    await waitForHydration();
+
+    rerender(
+      <ToastProvider>
+        <Composer
+          database={database}
+          now={NOW}
+          backfillRequest={{ id: 1, occurredAt: at(2026, 11, 16, 21, 40) }}
+        />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByRole("button", { name: "昨天 21:40" })).toBeInTheDocument();
+    expect(screen.getByLabelText("记录内容")).toHaveFocus();
+
+    fireEvent.change(screen.getByLabelText("记录内容"), {
+      target: { value: "补记到昨天" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "记录" }));
+
+    await waitFor(async () => {
+      expect(await database.entries.count()).toBe(1);
+    });
+    const [entry] = await database.entries.toArray();
+    expect(entry?.occurredAt).toBe(at(2026, 11, 16, 21, 40));
   });
 
   it("恢复草稿并提示", async () => {

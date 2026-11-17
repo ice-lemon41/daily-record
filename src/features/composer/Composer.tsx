@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/Toast";
 import type { AppDb } from "../../db/db";
 import { createEntry } from "../../db/repositories/entries";
@@ -10,16 +10,39 @@ import { parseTags } from "../../domain/parse-tags";
 import { useDraft } from "../../hooks/use-draft";
 import { TimeAttributionDialog } from "./TimeAttributionDialog";
 
+/** 补记请求：id 用于区分同一时间点的多次点击（PRD FR-06-3）。 */
+export interface BackfillRequest {
+  id: number;
+  occurredAt: number;
+}
+
 /** 顶部常驻输入框：草稿、时间归属、解析预览与提交（FR-01 / FR-02）。 */
-export function Composer({ database, now }: { database: AppDb; now: number }) {
+export function Composer({
+  database,
+  now,
+  backfillRequest = null,
+}: {
+  database: AppDb;
+  now: number;
+  backfillRequest?: BackfillRequest | null;
+}) {
   const { show } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeOpen, setTimeOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const handledBackfill = useRef<number | null>(null);
   const draft = useDraft(database, {
     onRestored: () => show("已恢复未提交的内容"),
   });
+
+  useEffect(() => {
+    if (!draft.hydrated || backfillRequest === null) return;
+    if (handledBackfill.current === backfillRequest.id) return;
+    handledBackfill.current = backfillRequest.id;
+    draft.setOccurredAt(backfillRequest.occurredAt);
+    textareaRef.current?.focus();
+  }, [draft.hydrated, draft.setOccurredAt, backfillRequest]);
 
   const metrics = useLiveQuery(() => listMetrics(database), [database]);
   const definitions = useMemo<MetricDefinition[]>(
