@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ToastProvider } from "./components/Toast";
 import { type AppDb, db } from "./db/db";
 import { combineLocalDateTime, dateKey, formatClock } from "./domain/dates";
@@ -22,6 +22,7 @@ export default function App({ database = db }: AppProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [backfillRequest, setBackfillRequest] = useState<BackfillRequest | null>(null);
+  const backfillSeq = useRef(0);
 
   function openSearch() {
     // 搜索与按天 / 标签筛选互斥（PRD FR-07-3）。
@@ -55,7 +56,8 @@ export default function App({ database = db }: AppProps) {
     if (filter?.kind !== "day") return;
     const occurredAt =
       combineLocalDateTime(dateKey(filter.dayStart), formatClock(now)) ?? filter.dayStart;
-    setBackfillRequest({ id: Date.now(), occurredAt });
+    backfillSeq.current += 1;
+    setBackfillRequest({ id: backfillSeq.current, occurredAt });
   }
 
   return (
