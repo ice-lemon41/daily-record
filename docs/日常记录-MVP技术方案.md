@@ -254,7 +254,7 @@ export function createDb(name = 'daily-record') {
   db.version(1).stores({
     entries: 'id, occurredAt, createdAt, pinned, deletedAt, [deletedAt+occurredAt], [deletedAt+pinned+occurredAt+createdAt+id]',
     tags: 'id, &name',
-    entryTags: '[entryId+tagId], entryId, tagId, [tagId+occurredAt]',
+    entryTags: '[entryId+tagId], entryId, tagId, [tagId+occurredAt+entryId]',
     metrics: 'id, &nameLower, archived',
     entryMetrics: 'id, &[entryId+metricId], entryId, metricId',
     kv: 'key',
@@ -350,7 +350,7 @@ MVP 只有 `version(1)`，但**从第一版就建立迁移纪律**：
 
 - 1 万条 × 平均 100 字 ≈ 几 MB，远低于配额；真正的风险是浏览器清存储，不是容量。
 - 时间线：`[deletedAt+pinned+occurredAt+createdAt+id]` 复合索引，游标是 `(occurredAt, createdAt, id)` 三元组，同一毫秒的记录不会重复或漏条；置顶区用 `[0, 1, min, min, ...]` 的区间单独查，主列表用 `[0, 0, ...]`（PRD FR-05-3：置顶不再出现在日期分组）。
-- 标签筛选：`entryTags` 上的 `[tagId+occurredAt]` 游标分页，每批多取几条、批量 `entries.bulkGet`，过滤掉软删除后补足 50 条；不一次性取全量 id（否则 1 万条会全渲染）。
+- 标签筛选：`entryTags` 上的 `[tagId+occurredAt+entryId]` 游标分页（带 `entryId` 保证同一毫秒也能稳定翻页），每批多取几条、批量 `entries.bulkGet`，过滤掉软删除后补足 50 条；不一次性取全量 id（否则 1 万条会全渲染）。
 - 日历打点：由「本地年月」算出当月的 UTC 起止毫秒，用 `[deletedAt+occurredAt]` 做范围查询，再按本地日期归组。一个月最多几百条，不需要额外的日期键，也不受用户时区变化影响。
 - 关键词搜索：`entries.where('deletedAt').equals(0).filter(...)` 全表扫描。**10k 条实测若 > 100ms，再引入 MiniSearch 内存索引**（M2 加一个 10k 基准测试来决策，不提前优化）。
 - 筛选状态（按天/标签/搜索）统一隐藏置顶区（PRD FR-05-7），三种筛选互斥由 `App` 的状态机保证。
@@ -365,16 +365,16 @@ MVP 只有 `version(1)`，但**从第一版就建立迁移纪律**：
 
 | PRD 规则 | 实现 |
 |---|---|
-| `#` + 1~20 个非空白非 `#` 字符 | 先匹配 `[^\s#]+`，再校验长度 `1 ≤ n ≤ 20`；超长整段不解析，**不截断成 20 字符** |
+| `#` + 1~20 个非空白非 `#` 字符 | 标签名在空白、`#` 或中英文标点处结束；再校验长度 `1 ≤ n ≤ 20`，超长整段不解析，**不截断成 20 字符** |
 | `#` 必须在行首、空白或标点之后 | 前置断言 `(?<=^|[\s，。！？、；：,.!?;:（(【[「『"'])` |
-| 末尾中英文标点不计入 | 匹配后 `replace(/[，。！？、；：,.!?;:）)】\]」』"']+$/,'')` |
+| 末尾中英文标点不计入 | 标点本身是标签结束符，因此 `#健康，` 只得到 `健康`；连续标签 `#健康，#运动。` 得到 `健康`、`运动` |
 | 英文统一小写 | 仅在「存储与去重」时 `toLowerCase()`，展示仍用原文 |
 | URL 片段不误判 | 前置断言排除 `/`、`&`、`=`、字母数字；`https://x/#/path` 不命中 |
 | 点击标签筛选 | 用 `name` 查询 `tags` → `entryTags` |
 
 ```ts
 // src/domain/parse-tags.ts
-const NAME = /[^\s#]{1,20}/g;
+const NAME = /[^\s#，。！？、；：,.!?;:（）()【】\[\]「」『』"'“”’]+/g;
 const BOUNDARY = /(^|[\s，。！？、；：,.!?;:（(【[「『"'])/;
 
 export function parseTags(content: string): ParsedTag[] {
