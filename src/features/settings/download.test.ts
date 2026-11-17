@@ -10,7 +10,7 @@ afterEach(() => {
 describe("downloadText", () => {
   it("把文本包成 UTF-8 Blob 并触发下载", async () => {
     vi.useFakeTimers();
-    const createObjectURL = vi.fn(() => "blob:daily-record");
+    const createObjectURL = vi.fn((_blob: Blob) => "blob:daily-record");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal(
       "URL",
