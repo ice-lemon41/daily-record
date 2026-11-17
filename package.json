@@ -1,0 +1,10 @@
+{
+  "name": "daily-record",
+  "version": "0.1.0",
+  "private": true,
+  "description": "日常记录产品：调研资料与后续实现",
+  "scripts": {
+    "test": "node scripts/check-docs.mjs",
+    "test:links": "node scripts/check-docs.mjs --links"
+  }
+}
