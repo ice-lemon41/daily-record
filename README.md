@@ -1,6 +1,6 @@
 # 日常记录
 
-单机、本地优先的随手记。当前处于 M1（数据层与解析器）阶段，界面尚未接入。
+单机、本地优先的随手记。当前处于 M2（主界面输入 + 时间线）阶段：可以写记录、按天查看、编辑、置顶与删除撤销，数据全部保存在浏览器本地。
 
 产品需求与技术方案见 [`docs/PRD.md`](./docs/PRD.md) 和 [`docs/日常记录-MVP技术方案.md`](./docs/日常记录-MVP技术方案.md)。
 
@@ -12,6 +12,7 @@
 | `npm run dev` | 启动本地开发服务器 |
 | `npm test` | 文档校验 + 单元/组件测试（提交前必须通过） |
 | `npm run test:coverage` | 额外生成覆盖率报告 |
+| `npm run test:bench` | 1 万条记录下的搜索基准（不随 `npm test` 运行） |
 | `npm run test:e2e` | Playwright 端到端测试（首次需 `npx playwright install chromium`） |
 | `npm run lint` | Biome 检查代码风格与常见问题 |
 | `npm run build` | 类型检查 + 生产构建（产物在 `dist/`） |

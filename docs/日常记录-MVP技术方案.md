@@ -115,21 +115,22 @@ daily-record/
 │   ├── icons/                  # 192/512/maskable PNG
 │   └── favicon.svg
 ├── src/
-│   ├── main.tsx                # createRoot + 注册 SW
+│   ├── main.tsx                # createRoot（M5 再接 SW）
 │   ├── App.tsx                 # 主界面骨架（无路由）
 │   ├── features/
 │   │   ├── composer/           # 输入框、时间归属、解析预览、提交
 │   │   ├── timeline/           # 分组列表、分页、条目菜单、撤销
-│   │   ├── calendar/           # 月视图、打点、按天筛选
-│   │   ├── search/             # 搜索框、高亮、筛选 chip
-│   │   └── settings/           # 导出/导入、指标管理、备份提醒
-│   ├── components/             # Button、Dialog、Chip、Toast 等无业务组件
+│   │   ├── editor/             # 编辑面板
+│   │   ├── calendar/           # 月视图、打点、按天筛选（M3）
+│   │   ├── search/             # 搜索框、高亮、筛选 chip（M3）
+│   │   └── settings/           # 导出/导入、指标管理、备份提醒（M4）
+│   ├── components/             # Toast、Modal 等无业务组件
 │   ├── db/
 │   │   ├── db.ts               # Dexie 实例与版本声明
 │   │   ├── schema.ts           # 行类型
-│   │   ├── migrations.ts       # 版本升级测试辅助
+│   │   ├── bench/              # 10k 搜索基准（不进默认测试）
 │   │   └── repositories/
-│   │       ├── entries.ts      # 增删改查、分页、筛选
+│   │       ├── entries.ts      # 增删改查、分页、筛选、搜索
 │   │       ├── metrics.ts
 │   │       ├── tags.ts
 │   │       └── kv.ts           # 草稿、lastExportAt、schemaVersion
@@ -142,16 +143,17 @@ daily-record/
 │   │   ├── import-json.ts      # 纯校验与转换，不碰 DB
 │   │   └── constants.ts        # 单位白名单、限制值
 │   ├── hooks/
-│   │   ├── use-entries.ts
 │   │   ├── use-draft.ts
-│   │   ├── use-now.ts
-│   │   └── use-pwa-update.ts
+│   │   └── use-now.ts
 │   ├── styles/index.css        # Tailwind 入口 + 设计变量
-│   └── test/setup.ts           # fake-indexeddb、时区、RTL 清理
+│   └── test/
+│       ├── setup.ts            # fake-indexeddb、时区、RTL 清理
+│       └── db.ts               # 独立测试库工厂与清理
 ├── tests/e2e/                  # Playwright
 ├── index.html
 ├── vite.config.ts
 ├── vitest.config.ts
+├── vitest.bench.config.ts
 ├── playwright.config.ts
 ├── tsconfig.json
 ├── biome.json
@@ -352,7 +354,7 @@ MVP 只有 `version(1)`，但**从第一版就建立迁移纪律**：
 - 时间线：`[deletedAt+pinned+occurredAt+createdAt+id]` 复合索引，游标是 `(occurredAt, createdAt, id)` 三元组，同一毫秒的记录不会重复或漏条；置顶区用 `[0, 1, min, min, ...]` 的区间单独查，主列表用 `[0, 0, ...]`（PRD FR-05-3：置顶不再出现在日期分组）。
 - 标签筛选：`entryTags` 上的 `[tagId+occurredAt+entryId]` 游标分页（带 `entryId` 保证同一毫秒也能稳定翻页），每批多取几条、批量 `entries.bulkGet`，过滤掉软删除后补足 50 条；不一次性取全量 id（否则 1 万条会全渲染）。
 - 日历打点：由「本地年月」算出当月的 UTC 起止毫秒，用 `[deletedAt+occurredAt]` 做范围查询，再按本地日期归组。一个月最多几百条，不需要额外的日期键，也不受用户时区变化影响。
-- 关键词搜索：`entries.where('deletedAt').equals(0).filter(...)` 全表扫描。**10k 条实测若 > 100ms，再引入 MiniSearch 内存索引**（M2 加一个 10k 基准测试来决策，不提前优化）。
+- 关键词搜索：先按 `[deletedAt]` 索引取回未删除条目，再在内存中做 `content.toLowerCase().includes(...)`。**不要用 Dexie 的 `Collection.filter`**：在 fake-indexeddb 下 1 万条会退化到分钟级；内存过滤实测约 50ms（`npm run test:bench`）。若真机明显超过 100ms，再引入 MiniSearch 内存索引。
 - 筛选状态（按天/标签/搜索）统一隐藏置顶区（PRD FR-05-7），三种筛选互斥由 `App` 的状态机保证。
 
 ---
@@ -485,10 +487,13 @@ kg g 斤 cm mm 公里 km 米 m 步 次 元 块 小时 分钟 分 秒 ml L 杯 �
 ### 5.3 草稿、提交与撤销
 
 - 输入：多行；移动端回车换行，不提交；桌面端 `Ctrl/Cmd + Enter` 提交；点「记录」按钮提交。
+- 提交时间：未指定时用提交瞬间的 `Date.now()`，不用页面上每分钟刷新的 `now`，避免整分钟误差；期间用 `submitting` 防止重复写入。
 - 空提交：去空白后为空 → 不写入、不报错、不清空输入框（PRD FR-01-3）。
 - 草稿：`onChange` 防抖 300ms 写 `kv.draft = { content, occurredAt }`；提交成功或主动清空后删除；恢复时 Toast 提示。
 - 草稿与「补记」共用：补记只把 `occurredAt` 预设为该日期 + 当前时分，正文草稿保留；取消「记录到 X」chip 时 `occurredAt` 回到当前时间，正文不变。
 - 删除：条目 `…` 菜单或编辑面板 → **二次确认**「删除这条记录？」→ 写 `deletedAt` → 5 秒 Toast 可撤销 → 超时后从时间线、日历打点、搜索、导出中全部消失。
+- 置顶：`…` 菜单直接切换，写入后用 `useLiveQuery` 自动把条目移到置顶区；置顶区不分页，且不会在日期分组里重复出现。
+- 时间线分页：首屏 50 条，点「加载更早」或滚动到哨兵元素时 `pageSize += 50`。jsdom 没有 `IntersectionObserver` 时只保留按钮，不影响测试。
 - 编辑面板字段：正文、发生时间（日期 + 时分）、置顶开关、删除、保存（PRD §6.3）；正文为空时禁用保存并提示「请使用删除」。
 - 编辑保存时保留 `extra`，并按新正文重新计算「新指标建议」；已忽略的建议按 `name + unit` 去重，不重复提示。
 - 空状态：时间线显示引导语与一行示例格式（不写库）；搜索无结果显示「没有找到相关记录」；筛选状态显示可关闭的 chip 并隐藏置顶区。
@@ -772,22 +777,26 @@ jobs:
 
 ```ts
 // src/test/setup.ts
-import 'fake-indexeddb/auto';
-import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
-import { afterEach } from 'vitest';
+import "fake-indexeddb/auto";
+import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach } from "vitest";
 
 // 时区通过 vitest.config.ts 的 test.env.TZ 设置，避免运行时改 TZ 在 Windows 上不生效
 
 afterEach(() => cleanup());
 ```
 
-- 每个数据层测试用 `createDb(crypto.randomUUID())` 建独立库，`afterEach` 删除，避免串数据；
-- 时间相关测试用 `vi.setSystemTime()`，不 sleep；
+- 每个数据层/组件测试用 `src/test/db.ts` 的 `makeTestDb()` 建独立库，`afterEach` 调 `cleanupTestDbs()` 删除，避免串数据；
+- 时间相关测试用固定时间戳或 `vi.setSystemTime()`，不 sleep；`useNow` 的每分钟刷新不参与断言；
+- 原生 `<dialog>` 在 jsdom 里没有 `showModal()`，`Modal` 自动退回 `open` 属性，组件测试可以直接交互；
+- 搜索基准用独立的 `vitest.bench.config.ts`，默认 `npm test` 通过 `exclude` 跳过 `*.bench.test.*`；
 - E2E 的 `webServer` 先构建再 `vite preview`，确保测的是产物而不是 dev server；
 - Playwright 只跑 Chromium（Android Chrome 同源内核），`viewport: { width: 360, height: 800 }`。
 
 ### 9.4 E2E 必跑场景
+
+> M2 已落地场景 1、5 与冒烟（320~430px 无横向滚动）；2、3、4、6、7 随 M3/M4/M5 补齐。
 
 1. 打开 → 写一条 → 刷新 → 仍存在（含离线版本）；
 2. 写标签 → 点击 → 只剩该标签，关闭 chip 恢复；
@@ -803,6 +812,7 @@ afterEach(() => cleanup());
 ### 9.5 覆盖率与门禁
 
 - `npm test` = 文档校验 + Vitest（默认不跑 10k 基准与 E2E）；
+- `npm run test:bench` = 1 万条搜索基准（`vitest.bench.config.ts`）；
 - `npm run test:e2e` = Playwright；
 - `npm run test:all` = 两者；
 - 覆盖率阈值：`src/domain` ≥ 90%，`src/db` ≥ 85%；低于阈值 CI 失败；
@@ -816,6 +826,7 @@ afterEach(() => cleanup());
     "preview": "vite preview",
     "test": "node scripts/check-docs.mjs && vitest run",
     "test:watch": "vitest",
+    "test:bench": "vitest run --config vitest.bench.config.ts",
     "test:e2e": "playwright test",
     "test:all": "npm test && npm run test:e2e",
     "lint": "biome check",
@@ -837,6 +848,8 @@ afterEach(() => cleanup());
 | **M4 数据安全** | JSON/Markdown 导出、导入（预览、二次确认、单事务）、指标管理、备份提醒 | FR-09/10/12 验收；round-trip 与坏文件测试绿 |
 | **M5 PWA 上线** | manifest/图标、SW 更新提示、GitHub Pages 部署、真机适配 | FR-11 + §10.1 全部验收；真机手动确认可安装、独立窗口、飞行模式可用；E2E 校验 manifest/SW |
 | **M6 产品验收** | 连续 7 天真实记录 | PRD §10.2 |
+
+> 进度（2026-11-17）：M0、M1、M2 已完成，`npm test`、`npm run test:e2e` 与生产构建均通过；下一步进入 M3（日历、搜索、补记）。
 
 > 参考工作量：M0 0.5 人日、M1 1.5、M2 2、M3 2、M4 1.5、M5 1，合计约 8.5 人日；M6 是 7 天真实使用，不占开发时间。估算只用于排期，不作为承诺。
 
