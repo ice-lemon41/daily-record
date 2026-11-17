@@ -5,10 +5,14 @@ test("点标签筛选，chip 可关闭", async ({ page }) => {
 
   await page.getByLabel("记录内容").fill("晨跑 30 分钟 #健康");
   await page.getByRole("button", { name: "记录", exact: true }).click();
+  await expect(page.getByLabel("记录内容")).toHaveValue("");
+  await expect(page.getByText("晨跑 30 分钟 #健康", { exact: true })).toBeVisible();
+
   await page.getByLabel("记录内容").fill("加班到很晚 #工作");
   await page.getByRole("button", { name: "记录", exact: true }).click();
+  await expect(page.getByLabel("记录内容")).toHaveValue("");
 
-  await expect(page.getByText("晨跑 30 分钟 #健康", { exact: true })).toBeVisible();
+  await expect(page.getByText("加班到很晚 #工作", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "筛选标签 健康" }).click();
 
   const chip = page.getByLabel("当前筛选");
@@ -58,8 +62,12 @@ test("搜索命中后高亮，点高亮进入编辑并保存", async ({ page }) 
 
   await page.getByLabel("记录内容").fill("今天开会又超时了");
   await page.getByRole("button", { name: "记录", exact: true }).click();
+  await expect(page.getByLabel("记录内容")).toHaveValue("");
+
   await page.getByLabel("记录内容").fill("无关的一条记录");
   await page.getByRole("button", { name: "记录", exact: true }).click();
+  await expect(page.getByLabel("记录内容")).toHaveValue("");
+  await expect(page.getByText("无关的一条记录", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "搜索" }).click();
   await page.getByLabel("搜索记录").fill("开会");
