@@ -1,10 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../../components/Toast";
 import type { AppDb } from "../../db/db";
 import { createEntry } from "../../db/repositories/entries";
 import { cleanupTestDbs, makeTestDb } from "../../test/db";
+import type { EntryFilter } from "../filter";
 import { Timeline } from "./Timeline";
+import type { TagSelection } from "./TimelineEntry";
 
 function at(year: number, month: number, day: number, hour = 0, minute = 0): number {
   return new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
@@ -12,10 +14,14 @@ function at(year: number, month: number, day: number, hour = 0, minute = 0): num
 
 const NOW = at(2026, 11, 17, 21, 40);
 
-function renderTimeline(database: AppDb) {
+function renderTimeline(
+  database: AppDb,
+  filter: EntryFilter | null = null,
+  onTagClick?: (tag: TagSelection) => void,
+) {
   return render(
     <ToastProvider>
-      <Timeline database={database} now={NOW} />
+      <Timeline database={database} now={NOW} filter={filter} onTagClick={onTagClick} />
     </ToastProvider>,
   );
 }
@@ -186,5 +192,75 @@ describe("Timeline", () => {
 
     expect(await screen.findByText("第 51 条")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加载更早" })).toBeNull();
+  });
+
+  it("按天筛选只显示当天，并隐藏置顶区", async () => {
+    const database = makeTestDb();
+    await createEntry(database, {
+      content: "今天的记录",
+      occurredAt: at(2026, 11, 17, 10, 0),
+      now: NOW,
+      pinned: 1,
+    });
+    await createEntry(database, {
+      content: "昨天的记录",
+      occurredAt: at(2026, 11, 16, 23, 0),
+      now: NOW,
+    });
+
+    renderTimeline(database, { kind: "day", dayStart: at(2026, 11, 16) });
+
+    expect(await screen.findByText("昨天的记录")).toBeInTheDocument();
+    expect(screen.queryByText("今天的记录")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "置顶" })).toBeNull();
+  });
+
+  it("按天筛选没有记录时给出补记提示", async () => {
+    renderTimeline(makeTestDb(), { kind: "day", dayStart: at(2026, 11, 15) });
+
+    expect(await screen.findByText("这天还没有记录。")).toBeInTheDocument();
+    expect(screen.getByText("可以用上方「在这天补记」。")).toBeInTheDocument();
+  });
+
+  it("按标签筛选只显示带该标签的记录，点击标签回传选中项", async () => {
+    const database = makeTestDb();
+    await createEntry(database, { content: "晨跑 #健康", occurredAt: at(2026, 11, 17, 7, 0), now: NOW });
+    await createEntry(database, { content: "加班 #工作", occurredAt: at(2026, 11, 17, 6, 0), now: NOW });
+    const onTagClick = vi.fn();
+
+    renderTimeline(database, { kind: "tag", name: "健康", nameLower: "健康" }, onTagClick);
+
+    expect(await screen.findByText("晨跑 #健康")).toBeInTheDocument();
+    expect(screen.queryByText("加班 #工作")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "筛选标签 健康" }));
+    expect(onTagClick).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "健康", nameLower: "健康" }),
+    );
+  });
+
+  it("按标签筛选没有记录时说明该标签为空", async () => {
+    renderTimeline(makeTestDb(), { kind: "tag", name: "旅行", nameLower: "旅行" });
+
+    expect(await screen.findByText("没有带 #旅行 的记录。")).toBeInTheDocument();
+  });
+
+  it("搜索命中正文时高亮关键词，没有结果时显示空状态", async () => {
+    const database = makeTestDb();
+    await createEntry(database, {
+      content: "今天开会又超时了",
+      occurredAt: at(2026, 11, 17, 9, 0),
+      now: NOW,
+    });
+
+    const { unmount } = renderTimeline(database, { kind: "search", keyword: "开会" });
+
+    const mark = await screen.findByText("开会");
+    expect(mark.tagName).toBe("MARK");
+    expect(screen.queryByRole("heading", { name: "今天" })).toBeInTheDocument();
+
+    unmount();
+    renderTimeline(database, { kind: "search", keyword: "不存在的词" });
+    expect(await screen.findByText("没有找到相关记录")).toBeInTheDocument();
   });
 });

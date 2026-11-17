@@ -1,9 +1,33 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/Toast";
 import type { AppDb } from "../../db/db";
 import { updateEntry } from "../../db/repositories/entries";
 import type { EntryMetricRow, EntryRow } from "../../db/schema";
 import { formatClock } from "../../domain/dates";
+import { splitHighlight } from "../../domain/highlight";
+import { parseTags } from "../../domain/parse-tags";
+
+export interface TagSelection {
+  name: string;
+  nameLower: string;
+}
+
+/** 正文中命中搜索词的部分用背景色高亮，不改变文字颜色（PRD FR-07-2）。 */
+function Highlighted({ text, keyword }: { text: string; keyword?: string }) {
+  return (
+    <>
+      {splitHighlight(text, keyword ?? "").map((part, index) =>
+        part.match ? (
+          <mark key={index} className="rounded-sm bg-amber-200/70 text-inherit">
+            {part.text}
+          </mark>
+        ) : (
+          <span key={index}>{part.text}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 /** 超过 6 行折叠（PRD FR-05-4）；按行数与字数近似判断。 */
 export function isLongContent(content: string): boolean {
@@ -14,22 +38,34 @@ interface TimelineEntryProps {
   database: AppDb;
   entry: EntryRow;
   metrics: EntryMetricRow[];
+  keyword?: string;
   onEdit: (entry: EntryRow) => void;
   onRequestDelete: (entry: EntryRow) => void;
+  onTagClick?: (tag: TagSelection) => void;
 }
 
 export function TimelineEntry({
   database,
   entry,
   metrics,
+  keyword,
   onEdit,
   onRequestDelete,
+  onTagClick,
 }: TimelineEntryProps) {
   const { show } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const long = isLongContent(entry.content);
+  const tags = useMemo(() => {
+    const seen = new Set<string>();
+    return parseTags(entry.content).filter((tag) => {
+      if (seen.has(tag.nameLower)) return false;
+      seen.add(tag.nameLower);
+      return true;
+    });
+  }, [entry.content]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -71,7 +107,7 @@ export function TimelineEntry({
               expanded || !long ? "" : "line-clamp-6"
             }`}
           >
-            {entry.content}
+            <Highlighted text={entry.content} keyword={keyword} />
           </span>
         </button>
 
@@ -83,6 +119,23 @@ export function TimelineEntry({
           >
             {expanded ? "收起" : "展开"}
           </button>
+        ) : null}
+
+        {tags.length > 0 ? (
+          <ul aria-label="标签" className="mt-1 flex flex-wrap gap-1.5">
+            {tags.map((tag) => (
+              <li key={tag.nameLower}>
+                <button
+                  type="button"
+                  aria-label={`筛选标签 ${tag.name}`}
+                  onClick={() => onTagClick?.(tag)}
+                  className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-100"
+                >
+                  #<Highlighted text={tag.name} keyword={keyword} />
+                </button>
+              </li>
+            ))}
+          </ul>
         ) : null}
 
         {metrics.length > 0 ? (

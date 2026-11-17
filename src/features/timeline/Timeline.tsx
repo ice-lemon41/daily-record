@@ -5,43 +5,74 @@ import { useToast } from "../../components/Toast";
 import type { AppDb } from "../../db/db";
 import {
   deleteEntry,
+  listEntriesByTag,
+  listEntriesForDay,
   listMetricValuesForEntries,
   listPinnedEntries,
   listTimeline,
   restoreEntry,
+  searchEntries,
 } from "../../db/repositories/entries";
 import type { EntryRow } from "../../db/schema";
 import { PAGE_SIZE } from "../../domain/constants";
 import { EntryEditor } from "../editor/EntryEditor";
+import type { EntryFilter } from "../filter";
 import { groupEntriesByDay } from "./grouping";
-import { TimelineEntry } from "./TimelineEntry";
+import { TimelineEntry, type TagSelection } from "./TimelineEntry";
 
-/** 时间线：置顶区 + 日期分组 + 滚动分页（PRD FR-05）。 */
-export function Timeline({ database, now }: { database: AppDb; now: number }) {
+interface TimelineProps {
+  database: AppDb;
+  now: number;
+  filter?: EntryFilter | null;
+  onTagClick?: (tag: TagSelection) => void;
+}
+
+/** 时间线：置顶区 + 日期分组 + 滚动分页（PRD FR-05 / FR-07）。 */
+export function Timeline({ database, now, filter = null, onTagClick }: TimelineProps) {
   const { show } = useToast();
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [editing, setEditing] = useState<EntryRow | null>(null);
   const [pendingDelete, setPendingDelete] = useState<EntryRow | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const pinned = useLiveQuery(() => listPinnedEntries(database), [database]);
-  const page = useLiveQuery(
-    () => listTimeline(database, { pinned: false, limit: pageSize }),
-    [database, pageSize],
-  );
+  useEffect(() => {
+    setPageSize(PAGE_SIZE);
+  }, [filter]);
 
-  const ids = [...(pinned ?? []), ...(page?.items ?? [])].map((entry) => entry.id);
+  const pinned = useLiveQuery(
+    () => (filter ? Promise.resolve<EntryRow[]>([]) : listPinnedEntries(database)),
+    [database, filter],
+  );
+  const data = useLiveQuery(async () => {
+    if (filter?.kind === "day") {
+      const items = await listEntriesForDay(database, filter.dayStart);
+      return { items: items.slice(0, pageSize), hasMore: items.length > pageSize };
+    }
+    if (filter?.kind === "tag") {
+      const page = await listEntriesByTag(database, filter.nameLower, { limit: pageSize });
+      return { items: page.items, hasMore: page.nextCursor !== null };
+    }
+    if (filter?.kind === "search") {
+      const items = await searchEntries(database, filter.keyword);
+      return { items: items.slice(0, pageSize), hasMore: items.length > pageSize };
+    }
+    const page = await listTimeline(database, { pinned: false, limit: pageSize });
+    return { items: page.items, hasMore: page.nextCursor !== null };
+  }, [database, filter, pageSize]);
+
+  const ids = [...(pinned ?? []), ...(data?.items ?? [])].map((entry) => entry.id);
   const idKey = ids.join("|");
   const metricValues = useLiveQuery(
     () => listMetricValuesForEntries(database, idKey ? idKey.split("|") : []),
     [database, idKey],
   );
 
-  const hasMore = page !== undefined && page.nextCursor !== null;
-  const loaded = pinned !== undefined && page !== undefined;
-  const pinnedItems = pinned ?? [];
-  const items = page?.items ?? [];
+  const hasMore = data?.hasMore === true;
+  const loaded = pinned !== undefined && data !== undefined;
+  const pinnedItems = filter ? [] : (pinned ?? []);
+  const items = data?.items ?? [];
   const groups = groupEntriesByDay(items, now);
+  const keyword = filter?.kind === "search" ? filter.keyword : undefined;
 
   useEffect(() => {
     if (!hasMore) return;
@@ -95,6 +126,23 @@ export function Timeline({ database, now }: { database: AppDb; now: number }) {
   }
 
   if (pinnedItems.length === 0 && items.length === 0) {
+    if (filter) {
+      const message =
+        filter.kind === "search"
+          ? "没有找到相关记录"
+          : filter.kind === "day"
+            ? "这天还没有记录。"
+            : `没有带 #${filter.name} 的记录。`;
+      return (
+        <div className="mt-6 rounded-2xl border border-dashed border-neutral-200 px-6 py-10 text-center">
+          <p className="text-sm text-neutral-500">{message}</p>
+          {filter.kind === "day" ? (
+            <p className="mt-2 text-xs text-neutral-400">可以用上方「在这天补记」。</p>
+          ) : null}
+        </div>
+      );
+    }
+
     return (
       <div className="mt-6 rounded-2xl border border-dashed border-neutral-200 px-6 py-10 text-center">
         <p className="text-sm text-neutral-500">还没有记录，写下第一条吧。</p>
@@ -120,8 +168,10 @@ export function Timeline({ database, now }: { database: AppDb; now: number }) {
                 database={database}
                 entry={entry}
                 metrics={metricValues?.get(entry.id) ?? []}
+                keyword={keyword}
                 onEdit={setEditing}
                 onRequestDelete={requestDelete}
+                onTagClick={onTagClick}
               />
             ))}
           </div>
@@ -143,8 +193,10 @@ export function Timeline({ database, now }: { database: AppDb; now: number }) {
                 database={database}
                 entry={entry}
                 metrics={metricValues?.get(entry.id) ?? []}
+                keyword={keyword}
                 onEdit={setEditing}
                 onRequestDelete={requestDelete}
+                onTagClick={onTagClick}
               />
             ))}
           </div>
