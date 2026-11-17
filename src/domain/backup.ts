@@ -16,10 +16,7 @@ export interface BackupStatus {
  * 根据上次导出时间生成设置页文案与红点状态。
  * 从未导出也算需要备份，避免新用户一直看不到提醒。
  */
-export function describeBackup(
-  lastExportAt: number | null | undefined,
-  now: number,
-): BackupStatus {
+export function describeBackup(lastExportAt: number | null | undefined, now: number): BackupStatus {
   if (lastExportAt === null || lastExportAt === undefined) {
     return { lastExportAt: null, days: null, needsBackup: true, label: "尚未备份" };
   }
