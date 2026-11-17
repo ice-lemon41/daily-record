@@ -10,8 +10,11 @@ import {
   getEntry,
   listEntriesBetween,
   listEntriesByTag,
+  listMetricValuesForEntries,
+  listPinnedEntries,
   listTimeline,
   restoreEntry,
+  searchEntries,
   updateEntry,
 } from "./entries";
 import { getKv, setKv } from "./kv";
@@ -342,6 +345,86 @@ describe("listEntriesByTag", () => {
 
     const page = await listEntriesByTag(db, "HEALTH");
     expect(page.items).toHaveLength(1);
+  });
+});
+
+describe("listPinnedEntries", () => {
+  it("只返回未删除的置顶条目，按发生时间倒序", async () => {
+    await createEntry(db, { content: "普通", occurredAt: 9, now: 9 });
+    await createEntry(db, { content: "置顶旧", occurredAt: 1, now: 1, pinned: 1 });
+    const deleted = await createEntry(db, {
+      content: "置顶已删",
+      occurredAt: 2,
+      now: 2,
+      pinned: 1,
+    });
+    await createEntry(db, { content: "置顶新", occurredAt: 3, now: 3, pinned: 1 });
+    await deleteEntry(db, deleted.entry.id);
+
+    expect((await listPinnedEntries(db)).map((entry) => entry.content)).toEqual([
+      "置顶新",
+      "置顶旧",
+    ]);
+  });
+});
+
+describe("listMetricValuesForEntries", () => {
+  it("一次取回多条记录的指标并按名称排序", async () => {
+    await createMetric(db, { name: "体重", unit: "kg" }, 1);
+    await createMetric(db, { name: "花费", unit: "元" }, 2);
+    const first = await createEntry(db, {
+      content: "体重 70kg 花费 30元",
+      occurredAt: 1,
+      now: 1,
+    });
+    const second = await createEntry(db, { content: "体重 71kg", occurredAt: 2, now: 2 });
+    const third = await createEntry(db, { content: "没有指标", occurredAt: 3, now: 3 });
+
+    const grouped = await listMetricValuesForEntries(db, [
+      first.entry.id,
+      second.entry.id,
+      third.entry.id,
+    ]);
+
+    expect(grouped.get(first.entry.id)?.map((row) => row.nameSnapshot)).toEqual(["体重", "花费"]);
+    expect(grouped.get(second.entry.id)).toHaveLength(1);
+    expect(grouped.get(third.entry.id)).toBeUndefined();
+  });
+
+  it("空数组不发查询", async () => {
+    expect(await listMetricValuesForEntries(db, [])).toEqual(new Map());
+  });
+});
+
+describe("searchEntries", () => {
+  it("按正文不区分大小写搜索，并按时间倒序", async () => {
+    await createEntry(db, { content: "今天开会", occurredAt: 1, now: 1 });
+    await createEntry(db, { content: "Meeting 记录", occurredAt: 2, now: 2 });
+    await createEntry(db, { content: "无关", occurredAt: 3, now: 3 });
+
+    const meeting = await searchEntries(db, "MEET");
+    expect(meeting.map((entry) => entry.content)).toEqual(["Meeting 记录"]);
+
+    const all = await searchEntries(db, "记");
+    expect(all.map((entry) => entry.content)).toEqual(["Meeting 记录"]);
+  });
+
+  it("跳过软删除条目，忽略空关键词", async () => {
+    const { entry } = await createEntry(db, { content: "要删掉的关键词", occurredAt: 1, now: 1 });
+    await deleteEntry(db, entry.id);
+
+    expect(await searchEntries(db, "关键词")).toEqual([]);
+    expect(await searchEntries(db, "   ")).toEqual([]);
+  });
+
+  it("支持限制返回条数", async () => {
+    for (let index = 1; index <= 3; index += 1) {
+      await createEntry(db, { content: `开会 ${index}`, occurredAt: index, now: index });
+    }
+
+    expect(
+      (await searchEntries(db, "开会", { limit: 2 })).map((entry) => entry.occurredAt),
+    ).toEqual([3, 2]);
   });
 });
 

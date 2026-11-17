@@ -1,4 +1,4 @@
-import { PAGE_SIZE } from "../../domain/constants";
+import { DRAFT_KV_KEY, PAGE_SIZE } from "../../domain/constants";
 import {
   filterIgnoredSuggestions,
   type MetricDefinition,
@@ -150,7 +150,7 @@ export async function createEntry(db: AppDb, input: CreateEntryInput): Promise<S
     async () => {
       await db.entries.add(entry);
       await writeDerived(db, entry, definitions);
-      await db.kv.delete("draft");
+      await db.kv.delete(DRAFT_KV_KEY);
     },
   );
 
@@ -249,6 +249,69 @@ export async function listTimeline(
       : null;
 
   return { items, nextCursor };
+}
+
+/** 置顶区不分页（PRD FR-05-3），直接走复合索引取全部。 */
+export async function listPinnedEntries(db: AppDb): Promise<EntryRow[]> {
+  return db.entries
+    .where(TIMELINE_INDEX)
+    .between(
+      [0, 1, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, ""],
+      [0, 1, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, MAX_KEY_STRING],
+      true,
+      false,
+    )
+    .reverse()
+    .toArray();
+}
+
+/** 时间线条目的指标摘要，一次批量取回，避免每张卡片各查一次。 */
+export async function listMetricValuesForEntries(
+  db: AppDb,
+  entryIds: string[],
+): Promise<Map<string, EntryMetricRow[]>> {
+  const grouped = new Map<string, EntryMetricRow[]>();
+  if (entryIds.length === 0) return grouped;
+
+  const rows = await db.entryMetrics.where("entryId").anyOf(entryIds).toArray();
+  for (const row of rows) {
+    const list = grouped.get(row.entryId) ?? [];
+    list.push(row);
+    grouped.set(row.entryId, list);
+  }
+
+  for (const list of grouped.values()) {
+    list.sort((a, b) =>
+      a.nameSnapshot < b.nameSnapshot
+        ? -1
+        : a.nameSnapshot > b.nameSnapshot
+          ? 1
+          : a.value - b.value,
+    );
+  }
+
+  return grouped;
+}
+
+/** 关键词搜索：正文不区分大小写。10k 基准见 src/db/bench。 */
+export async function searchEntries(
+  db: AppDb,
+  keyword: string,
+  options: { limit?: number } = {},
+): Promise<EntryRow[]> {
+  const needle = keyword.trim().toLowerCase();
+  if (needle.length === 0) return [];
+
+  // 不用 Dexie 的 Collection.filter：fake-indexeddb 下 10k 条会退化成分钟级；
+  // 直接取回后内存过滤，10k 实测约 50ms（见 src/db/bench）。
+  const rows = await db.entries.where("deletedAt").equals(0).toArray();
+  const items = rows.filter((entry) => entry.content.toLowerCase().includes(needle));
+
+  items.sort(
+    (a, b) => b.occurredAt - a.occurredAt || b.createdAt - a.createdAt || b.id.localeCompare(a.id),
+  );
+
+  return options.limit ? items.slice(0, options.limit) : items;
 }
 
 /** 日历 / 按天筛选 / 补记：半开区间 [start, end)。 */

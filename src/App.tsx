@@ -1,17 +1,32 @@
-export default function App() {
+import { ToastProvider } from "./components/Toast";
+import { type AppDb, db } from "./db/db";
+import { Composer } from "./features/composer/Composer";
+import { Timeline } from "./features/timeline/Timeline";
+import { useNow } from "./hooks/use-now";
+
+interface AppProps {
+  /** 测试时注入独立数据库；运行期使用全局单例。 */
+  database?: AppDb;
+}
+
+export default function App({ database = db }: AppProps) {
+  const now = useNow();
+
   return (
-    <div className="min-h-dvh bg-neutral-100">
-      <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-white">
-        <header className="flex items-baseline justify-between px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-3">
-          <h1 className="text-lg font-semibold tracking-tight text-neutral-900">日常记录</h1>
-          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
-            开发中
-          </span>
-        </header>
-        <main className="flex flex-1 flex-col items-center justify-center gap-2 px-6 pb-24 text-center">
-          <p className="text-sm text-neutral-500">脚手架已就绪，接下来会在这里写记录。</p>
-        </main>
+    <ToastProvider>
+      <div className="min-h-dvh bg-neutral-100">
+        <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-white">
+          <header className="px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-1">
+            <h1 className="text-lg font-semibold tracking-tight text-neutral-900">日常记录</h1>
+          </header>
+
+          <Composer database={database} now={now} />
+
+          <main className="flex-1 px-4">
+            <Timeline database={database} now={now} />
+          </main>
+        </div>
       </div>
-    </div>
+    </ToastProvider>
   );
 }

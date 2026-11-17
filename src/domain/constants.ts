@@ -38,5 +38,9 @@ export const MAX_METRIC_SUGGESTIONS = 3;
 /** 时间线每页条数（PRD FR-05）。 */
 export const PAGE_SIZE = 50;
 
+/** 草稿保存在 kv 的固定键（PRD FR-02）。 */
+export const DRAFT_KV_KEY = "draft";
+export const DRAFT_DEBOUNCE_MS = 300;
+
 /** 导出文件名前缀，例如 daily-record-20261117-2140.json。 */
 export const EXPORT_FILE_PREFIX = "daily-record";

@@ -59,6 +59,38 @@ export function formatClock(ts: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+export interface LocalDateTimeParts {
+  /** YYYY-MM-DD，可直接用于 <input type="date">。 */
+  date: string;
+  /** HH:mm，可直接用于 <input type="time">。 */
+  time: string;
+}
+
+/** 把时间戳拆成日期、时分输入框的值（PRD FR-01-5）。 */
+export function splitLocalDateTime(ts: number): LocalDateTimeParts {
+  return { date: dateKey(ts), time: formatClock(ts) };
+}
+
+/** 把本地日期 + 时分合成毫秒；非法日期（如 2 月 30 日）返回 null。 */
+export function combineLocalDateTime(date: string, time: string): number | null {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(date);
+  const timeMatch = /^(\d{2}):(\d{2})$/u.exec(time);
+  if (!dateMatch || !timeMatch) return null;
+
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  if (hour > 23 || minute > 59) return null;
+
+  const ts = new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
+  const roundTrip = splitLocalDateTime(ts);
+  if (roundTrip.date !== date || roundTrip.time !== time) return null;
+
+  return ts;
+}
+
 /** 文件名里的本地时间戳：YYYYMMDD-HHmm。 */
 export function formatFileStamp(ts: number): string {
   const date = new Date(ts);

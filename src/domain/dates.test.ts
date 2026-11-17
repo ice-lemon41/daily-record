@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   addLocalDays,
   calendarGrid,
+  combineLocalDateTime,
   dateKey,
   formatClock,
   formatFileStamp,
   formatGroupTitle,
   localDayRange,
   localMonthRange,
+  splitLocalDateTime,
   startOfLocalDay,
   weekdayLabel,
 } from "./dates";
@@ -79,6 +81,28 @@ describe("formatClock / formatFileStamp", () => {
 
   it("输出文件名时间戳", () => {
     expect(formatFileStamp(at(2026, 11, 17, 21, 40))).toBe("20261117-2140");
+  });
+});
+
+describe("splitLocalDateTime / combineLocalDateTime", () => {
+  it("拆出日期与时分输入框的值", () => {
+    expect(splitLocalDateTime(at(2026, 11, 17, 8, 5))).toEqual({
+      date: "2026-11-17",
+      time: "08:05",
+    });
+  });
+
+  it("合成后与原始时间一致", () => {
+    expect(combineLocalDateTime("2026-11-17", "21:40")).toBe(at(2026, 11, 17, 21, 40));
+  });
+
+  it("拒绝非法日期与时分", () => {
+    expect(combineLocalDateTime("2026-02-30", "10:00")).toBeNull();
+    expect(combineLocalDateTime("2026-13-01", "10:00")).toBeNull();
+    expect(combineLocalDateTime("2026-11-17", "24:00")).toBeNull();
+    expect(combineLocalDateTime("2026-11-17", "10:60")).toBeNull();
+    expect(combineLocalDateTime("2026/11/17", "10:00")).toBeNull();
+    expect(combineLocalDateTime("2026-11-17", "")).toBeNull();
   });
 });
 
