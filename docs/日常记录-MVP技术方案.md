@@ -924,7 +924,7 @@ afterEach(() => cleanup());
 | zod | 4.6.7 |
 | vite-plugin-pwa | 2.0.0 |
 | vitest | 5.1.0 |
-| jsdom | 31.0.1 |
+| jsdom | 29.0.0（31.x 要求 Node ≥ 24.15；本地 24.14 会告警） |
 | @testing-library/react | 16.3.3 |
 | @testing-library/jest-dom | 7.0.1 |
 | fake-indexeddb | 6.2.8 |

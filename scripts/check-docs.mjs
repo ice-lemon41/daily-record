@@ -28,7 +28,7 @@ const TIMEOUT_MS = 15000;
 const errors = [];
 const warnings = [];
 
-const rel = (p) => p.replace(ROOT + "\\", "").replace(ROOT + "/", "");
+const rel = (p) => p.replace(`${ROOT}\\`, "").replace(`${ROOT}/`, "");
 
 async function walk(dir) {
   let entries;
@@ -91,11 +91,13 @@ function linkTargets(md) {
   const text = stripCode(md);
   const targets = [];
   const re = /!?\[[^\]]*\]\(\s*<?([^)>\s]+)>?(?:\s+["'][^"']*["'])?\s*\)/g;
-  let m;
-  while ((m = re.exec(text))) {
+  let m = re.exec(text);
+  while (m) {
     const url = m[1];
-    if (!url || url.startsWith("#")) continue;
-    targets.push(url);
+    if (url && !url.startsWith("#")) {
+      targets.push(url);
+    }
+    m = re.exec(text);
   }
   return [...new Set(targets)];
 }
@@ -193,7 +195,7 @@ async function main() {
         done += 1;
         if (done % 10 === 0) console.log(`  已检查 ${done}/${unique.length}`);
       }),
-      CONCURRENCY
+      CONCURRENCY,
     );
   }
 
