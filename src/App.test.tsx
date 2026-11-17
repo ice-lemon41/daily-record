@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it } from "vitest";
 import App from "./App";
 import { createEntry } from "./db/repositories/entries";
+import { setKv } from "./db/repositories/kv";
+import { LAST_EXPORT_AT_KV_KEY } from "./domain/constants";
 import { dateKey, formatClock, startOfLocalDay } from "./domain/dates";
 import { cleanupTestDbs, makeTestDb } from "./test/db";
 
@@ -152,5 +154,33 @@ describe("App", () => {
     fireEvent.click(selected);
 
     expect(screen.queryByLabelText("当前筛选")).toBeNull();
+  });
+
+  it("设置入口带备份红点，进入设置后可返回主界面", async () => {
+    render(<App database={makeTestDb()} />);
+
+    const settingsButton = await screen.findByRole("button", { name: /设置/u });
+    expect(settingsButton).toHaveAccessibleName(/需要备份/u);
+
+    fireEvent.click(settingsButton);
+
+    expect(await screen.findByRole("heading", { name: "设置" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("记录内容")).toBeNull();
+    expect(await screen.findByText("尚未备份")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "返回主界面" }));
+
+    expect(await screen.findByRole("heading", { name: "日常记录" })).toBeInTheDocument();
+    expect(screen.getByLabelText("记录内容")).toBeInTheDocument();
+  });
+
+  it("14 天内导出过时不显示备份红点", async () => {
+    const database = makeTestDb();
+    await setKv(database, LAST_EXPORT_AT_KV_KEY, Date.now());
+
+    render(<App database={database} />);
+
+    const settingsButton = await screen.findByRole("button", { name: /设置/u });
+    await waitFor(() => expect(settingsButton).not.toHaveAccessibleName(/需要备份/u));
   });
 });
