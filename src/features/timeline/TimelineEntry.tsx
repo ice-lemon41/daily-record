@@ -14,15 +14,22 @@ export interface TagSelection {
 
 /** 正文中命中搜索词的部分用背景色高亮，不改变文字颜色（PRD FR-07-2）。 */
 function Highlighted({ text, keyword }: { text: string; keyword?: string }) {
+  let offset = 0;
+  const parts = splitHighlight(text, keyword ?? "").map((part) => {
+    const key = `${offset}:${part.match ? "match" : "text"}`;
+    offset += part.text.length;
+    return { ...part, key };
+  });
+
   return (
     <>
-      {splitHighlight(text, keyword ?? "").map((part, index) =>
+      {parts.map((part) =>
         part.match ? (
-          <mark key={index} className="rounded-sm bg-amber-200/70 text-inherit">
+          <mark key={part.key} className="rounded-sm bg-amber-200/70 text-inherit">
             {part.text}
           </mark>
         ) : (
-          <span key={index}>{part.text}</span>
+          <span key={part.key}>{part.text}</span>
         ),
       )}
     </>

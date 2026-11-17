@@ -16,9 +16,9 @@ export function filterLabel(filter: EntryFilter): string {
 /** 顶部筛选 chip：按天时额外提供「在这天补记」（PRD FR-06-3 / FR-07-4）。 */
 export function FilterBar({ filter, onBackfill, onClose }: FilterBarProps) {
   return (
-    <div className="flex items-center gap-2 px-4 pb-2">
+    <section aria-label="当前筛选" className="flex items-center gap-2 px-4 pb-2">
       <span className="inline-flex min-h-9 items-center gap-1 rounded-full bg-neutral-100 py-1 pl-3 pr-1 text-xs text-neutral-700">
-        <span aria-label="当前筛选">{filterLabel(filter)}</span>
+        <span>{filterLabel(filter)}</span>
         <button
           type="button"
           aria-label="关闭筛选"
@@ -38,6 +38,6 @@ export function FilterBar({ filter, onBackfill, onClose }: FilterBarProps) {
           在这天补记
         </button>
       ) : null}
-    </div>
+    </section>
   );
 }

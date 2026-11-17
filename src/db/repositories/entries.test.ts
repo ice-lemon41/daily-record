@@ -449,9 +449,7 @@ describe("searchEntries", () => {
     const both = await createEntry(db, { content: "#健康 早睡", occurredAt: 2, now: 2 });
 
     const result = await searchEntries(db, "健康");
-    expect(result.map((entry) => entry.id).sort()).toEqual(
-      [tagged.entry.id, both.entry.id].sort(),
-    );
+    expect(result.map((entry) => entry.id).sort()).toEqual([tagged.entry.id, both.entry.id].sort());
   });
 
   it("跳过软删除条目，忽略空关键词", async () => {

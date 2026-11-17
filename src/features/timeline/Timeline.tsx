@@ -18,7 +18,7 @@ import { PAGE_SIZE } from "../../domain/constants";
 import { EntryEditor } from "../editor/EntryEditor";
 import type { EntryFilter } from "../filter";
 import { groupEntriesByDay } from "./grouping";
-import { TimelineEntry, type TagSelection } from "./TimelineEntry";
+import { type TagSelection, TimelineEntry } from "./TimelineEntry";
 
 interface TimelineProps {
   database: AppDb;
@@ -35,6 +35,7 @@ export function Timeline({ database, now, filter = null, onTagClick }: TimelineP
   const [pendingDelete, setPendingDelete] = useState<EntryRow | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 筛选变化时重置分页
   useEffect(() => {
     setPageSize(PAGE_SIZE);
   }, [filter]);

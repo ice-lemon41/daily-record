@@ -111,7 +111,7 @@ describe("Timeline", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
 
     await waitFor(() => expect(screen.queryByText("要删除的记录")).toBeNull());
-    expect(screen.getByRole("status")).toHaveTextContent("已删除");
+    expect(await screen.findByRole("status")).toHaveTextContent("已删除");
     expect(screen.getByRole("button", { name: "撤销" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "撤销" }));
@@ -224,8 +224,16 @@ describe("Timeline", () => {
 
   it("按标签筛选只显示带该标签的记录，点击标签回传选中项", async () => {
     const database = makeTestDb();
-    await createEntry(database, { content: "晨跑 #健康", occurredAt: at(2026, 11, 17, 7, 0), now: NOW });
-    await createEntry(database, { content: "加班 #工作", occurredAt: at(2026, 11, 17, 6, 0), now: NOW });
+    await createEntry(database, {
+      content: "晨跑 #健康",
+      occurredAt: at(2026, 11, 17, 7, 0),
+      now: NOW,
+    });
+    await createEntry(database, {
+      content: "加班 #工作",
+      occurredAt: at(2026, 11, 17, 6, 0),
+      now: NOW,
+    });
     const onTagClick = vi.fn();
 
     renderTimeline(database, { kind: "tag", name: "健康", nameLower: "健康" }, onTagClick);
