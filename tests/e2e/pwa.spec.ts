@@ -46,6 +46,29 @@ test("PWA manifest 与 Service Worker 资源可访问", async ({ page }) => {
   expect(await swResponse.text()).toContain("precache");
 });
 
+test("断网后可打开并记一条，恢复网络后仍在", async ({ page, context }) => {
+  await page.goto("/");
+
+  // 首次加载后等 SW 激活，再重载一次确保页面已被 SW 接管（技术方案 §9.4）。
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "日常记录" })).toBeVisible();
+
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "日常记录" })).toBeVisible();
+
+  await page.getByLabel("记录内容").fill("飞行模式下记的一条");
+  await page.getByRole("button", { name: "记录", exact: true }).click();
+  await expect(page.getByText("飞行模式下记的一条", { exact: true })).toBeVisible();
+
+  await context.setOffline(false);
+  await page.reload();
+  await expect(page.getByText("飞行模式下记的一条", { exact: true })).toBeVisible();
+});
+
 test("320px 窄屏无横向滚动，输入框与提交按钮可见", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto("/");
