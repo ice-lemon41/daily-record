@@ -1,10 +1,10 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ToastProvider } from "./components/Toast";
 import { type AppDb, db } from "./db/db";
 import { getKv } from "./db/repositories/kv";
 import { describeBackup } from "./domain/backup";
-import { LAST_EXPORT_AT_KV_KEY } from "./domain/constants";
+import { DRAFT_KV_KEY, LAST_EXPORT_AT_KV_KEY } from "./domain/constants";
 import { combineLocalDateTime, dateKey, formatClock } from "./domain/dates";
 import { CalendarSheet } from "./features/calendar/CalendarSheet";
 import { type BackfillRequest, Composer } from "./features/composer/Composer";
@@ -13,7 +13,10 @@ import { SearchBar } from "./features/search/SearchBar";
 import { FilterBar } from "./features/timeline/FilterBar";
 import { Timeline } from "./features/timeline/Timeline";
 import type { TagSelection } from "./features/timeline/TimelineEntry";
+import type { DraftRecord } from "./hooks/use-draft";
 import { useNow } from "./hooks/use-now";
+import { PwaUpdateBanner } from "./pwa/PwaUpdateBanner";
+import { usePwaUpdate } from "./pwa/use-pwa-update";
 
 const SettingsPage = lazy(() =>
   import("./features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })),
@@ -36,7 +39,15 @@ export default function App({ database = db }: AppProps) {
     () => getKv<number>(database, LAST_EXPORT_AT_KV_KEY),
     [database],
   );
+  const draft = useLiveQuery(() => getKv<DraftRecord>(database, DRAFT_KV_KEY), [database]);
   const needsBackup = describeBackup(lastExportAt ?? null, now).needsBackup;
+  const { needRefresh, update } = usePwaUpdate();
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const hasUnsaved = (draft?.content ?? "").trim().length > 0;
+
+  useEffect(() => {
+    if (!needRefresh) setUpdateDismissed(false);
+  }, [needRefresh]);
 
   function openSettings() {
     setSearchOpen(false);
@@ -84,6 +95,13 @@ export default function App({ database = db }: AppProps) {
     <ToastProvider>
       <div className="min-h-dvh bg-neutral-100">
         <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-white">
+          <PwaUpdateBanner
+            needRefresh={needRefresh && !updateDismissed}
+            hasUnsaved={hasUnsaved}
+            onRefresh={update}
+            onDismiss={() => setUpdateDismissed(true)}
+          />
+
           {view === "settings" ? (
             <Suspense
               fallback={<p className="py-10 text-center text-sm text-neutral-400">正在加载设置…</p>}
