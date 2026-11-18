@@ -10,7 +10,7 @@ afterEach(() => {
   else Reflect.deleteProperty(navigator, "serviceWorker");
 });
 
-function stubServiceWorker() {
+function stubServiceWorker(options: { hasWaiting?: boolean } = {}) {
   const listeners = new Map<string, () => void>();
   const waiting = { postMessage: vi.fn() };
   const installing = {
@@ -21,7 +21,7 @@ function stubServiceWorker() {
   };
   const registration = {
     installing,
-    waiting,
+    waiting: options.hasWaiting === false ? null : waiting,
     addEventListener: vi.fn((type: string, listener: () => void) => {
       listeners.set(type, listener);
     }),
@@ -38,10 +38,12 @@ function stubServiceWorker() {
 
 describe("usePwaUpdate", () => {
   it("注册 sw.js，并在新版本安装完成时提示", async () => {
-    const { register, listeners } = stubServiceWorker();
+    const { register, listeners } = stubServiceWorker({ hasWaiting: false });
     const { result } = renderHook(() => usePwaUpdate(true));
 
     await waitFor(() => expect(register).toHaveBeenCalledWith("/sw.js"));
+    // 等注册的 Promise 执行完、监听器挂上，避免时序不同导致断言不稳定。
+    await waitFor(() => expect(listeners.has("updatefound")).toBe(true));
     expect(result.current.needRefresh).toBe(false);
 
     act(() => {
