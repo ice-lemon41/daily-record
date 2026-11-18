@@ -1,6 +1,6 @@
 # 日常记录
 
-单机、本地优先的随手记。当前处于 M4（数据安全）阶段：可以写记录、按天查看、编辑、置顶与删除撤销，也能点标签筛选、搜索高亮，或在日历里选日期补记；设置页支持导出 JSON/Markdown、导入 JSON、管理指标，并在超过 14 天未备份时提醒。数据全部保存在浏览器本地。
+单机、本地优先的随手记。M5（PWA 上线）已完成：可以写记录、按天查看、编辑、置顶与删除撤销，也能点标签筛选、搜索高亮、日历补记；设置页支持导出 JSON/Markdown、导入 JSON、管理指标和备份提醒。现在可以用 Android 浏览器「添加到主屏幕」，独立窗口打开；首次联网访问后会预缓存应用外壳，飞行模式下仍可打开、记录、搜索和导出。发现新版本时只提示，不会自动刷新。数据全部保存在浏览器本地。
 
 产品需求与技术方案见 [`docs/PRD.md`](./docs/PRD.md) 和 [`docs/日常记录-MVP技术方案.md`](./docs/日常记录-MVP技术方案.md)。
 
@@ -13,6 +13,7 @@
 | `npm test` | 文档校验 + 单元/组件测试（提交前必须通过） |
 | `npm run test:coverage` | 额外生成覆盖率报告 |
 | `npm run test:bench` | 1 万条记录下的搜索基准（不随 `npm test` 运行） |
+| `npm run icons` | 重新生成 PWA 图标（192/512/maskable PNG） |
 | `npm run test:e2e` | Playwright 端到端测试（首次需 `npx playwright install chromium`） |
 | `npm run lint` | Biome 检查代码风格与常见问题 |
 | `npm run build` | 类型检查 + 生产构建（产物在 `dist/`） |

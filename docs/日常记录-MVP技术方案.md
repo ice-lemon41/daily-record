@@ -110,12 +110,15 @@ PRD 的硬约束直接决定了技术方案，逐条对应如下：
 ```
 daily-record/
 ├── docs/                       # PRD、调研、本方案
-├── scripts/check-docs.mjs      # 已有的文档校验
+├── scripts/
+│   ├── check-docs.mjs          # 文档校验
+│   ├── check-icons.mjs         # 图标尺寸/格式校验（进 npm test）
+│   └── generate-icons.mjs      # 由 favicon 图形生成 192/512/maskable PNG
 ├── public/
 │   ├── icons/                  # 192/512/maskable PNG
 │   └── favicon.svg
 ├── src/
-│   ├── main.tsx                # createRoot（M5 再接 SW）
+│   ├── main.tsx                # createRoot
 │   ├── App.tsx                 # 主界面骨架（无路由）
 │   ├── features/
 │   │   ├── composer/           # 输入框、时间归属、解析预览、提交
@@ -145,6 +148,9 @@ daily-record/
 │   ├── hooks/
 │   │   ├── use-draft.ts
 │   │   └── use-now.ts
+│   ├── pwa/                    # SW 注册、新版本提示条（M5）
+│   │   ├── use-pwa-update.ts
+│   │   └── PwaUpdateBanner.tsx
 │   ├── styles/index.css        # Tailwind 入口 + 设计变量
 │   └── test/
 │       ├── setup.ts            # fake-indexeddb、时区、RTL 清理
@@ -621,7 +627,7 @@ kg g 斤 cm mm 公里 km 米 m 步 次 元 块 小时 分钟 分 秒 ml L 杯 �
 | `lang` | `zh-CN` |
 | `icons` | 192、512、512 maskable |
 
-图标先由一张 1024px 源图生成三份 PNG；不引入图标库。
+图标直接复用 `favicon.svg` 里的圆角黑板 + 三条横线，由 `scripts/generate-icons.mjs` 以像素采样生成三份 PNG；maskable 版本铺满画布，保证安卓图标裁切后内容仍在安全区。`npm run icons` 可重新生成，`npm test` 会检查尺寸与 PNG 格式。
 
 ### 7.2 Service Worker 策略
 
@@ -629,18 +635,21 @@ kg g 斤 cm mm 公里 km 米 m 步 次 元 块 小时 分钟 分 秒 ml L 杯 �
 // vite.config.ts
 VitePWA({
   registerType: 'prompt',
+  injectRegister: null,           // 由应用自己注册，方便测更新提示
   manifest: { /* 见上表 */ },
   workbox: {
     globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
     navigateFallback: 'index.html',
     cleanupOutdatedCaches: true,
+    clientsClaim: true,
     runtimeCaching: [],          // 除静态资源外不发起任何请求
   },
+  devOptions: { enabled: false },
 })
 ```
 
 - **只预缓存、不做运行时缓存**：PRD 要求除静态资源外零请求，避免缓存策略带来一致性 bug。
-- **更新提示**：`registerType: 'prompt'`，`onNeedRefresh` 时显示顶部条「有新版本，点击刷新」。若输入框有内容或草稿非空，提示改为「保存后刷新」，**绝不自动 reload**（PRD FR-11）。
+- **注册与更新提示**：`src/pwa/use-pwa-update.ts` 手动注册 `${BASE_URL}sw.js`；`updatefound` 后新 worker 进入 `installed` 且当前页仍被旧版本控制时才显示顶部条。点「刷新」才发 `SKIP_WAITING` 并 reload；草稿非空时文案改成「有新版本，保存后再刷新」，只给「稍后」按钮，**绝不自动 reload**（PRD FR-11）。
 - **离线**：首次访问安装 SW 后，断网可打开、记录、搜索、导出；E2E 覆盖。
 - **缓存清理**：`cleanupOutdatedCaches` + 版本化 precache manifest，避免旧 JS 混用。
 
@@ -781,7 +790,7 @@ jobs:
 | FR-08 编辑删除 | 空正文不可保存、改时间移动分组、5 秒撤销 | 组件 + E2E |
 | FR-09 指标管理 | 重名拒绝（含已归档）、名称/单位长度与非法字符、归档后不参与识别、历史单位快照、归档可恢复 | 单测 + 组件 |
 | FR-10 导出导入 | round-trip 零丢失、坏文件不破坏数据、文件名、预览与保险导出 | 单测 + 组件 + E2E |
-| FR-11 PWA | manifest 结构、离线写读、更新提示不自动刷新（真实安装由真机手验） | E2E + 单测（hook） |
+| FR-11 PWA | manifest 结构与图标可访问、离线写读、更新提示不自动刷新（真实安装由真机手验） | E2E + 单测 + 组件 |
 | FR-12 备份提醒 | 从未导出提示、0 天/14 天边界、红点显示与消失 | 单测 + 组件 |
 
 ### 9.3 测试基础设施
@@ -807,7 +816,7 @@ afterEach(() => cleanup());
 
 ### 9.4 E2E 必跑场景
 
-> M2 已落地场景 1、5 与冒烟（320~430px 无横向滚动）；M3 已补齐场景 2、3、4；M4 已补齐场景 6（含损坏文件不破坏原数据）；7、8 随 M5 补齐。
+> M2 已落地场景 1、5 与冒烟；M3 已补齐场景 2、3、4；M4 已补齐场景 6（含损坏文件不破坏原数据）；M5 已补齐场景 7（离线刷新后仍可记录）与场景 8（320px 窄屏）。八个场景全部有自动化覆盖；「从主屏幕启动无地址栏」仍需真机手验。
 
 1. 打开 → 写一条 → 刷新 → 仍存在（含离线版本）；
 2. 写标签 → 点击 → 只剩该标签，关闭 chip 恢复；
@@ -860,7 +869,7 @@ afterEach(() => cleanup());
 | **M5 PWA 上线** | manifest/图标、SW 更新提示、GitHub Pages 部署、真机适配 | FR-11 + §10.1 全部验收；真机手动确认可安装、独立窗口、飞行模式可用；E2E 校验 manifest/SW |
 | **M6 产品验收** | 连续 7 天真实记录 | PRD §10.2 |
 
-> 进度（2026-11-17）：M0、M1、M2、M3、M4 已完成，`npm test`（195 个）、`npm run test:e2e`（8 个）、`npm run lint` 与生产构建均通过；下一步进入 M5（PWA 上线）。
+> 进度（2026-11-18）：M0～M5 已完成，`npm test`（201 个）、`npm run test:e2e`（11 个）、`npm run lint` 与生产构建均通过；下一步进入 M6（连续 7 天真实使用），上线前只需真机确认「添加到主屏幕 / 独立窗口 / 飞行模式」。
 
 > 参考工作量：M0 0.5 人日、M1 1.5、M2 2、M3 2、M4 1.5、M5 1，合计约 8.5 人日；M6 是 7 天真实使用，不占开发时间。估算只用于排期，不作为承诺。
 
