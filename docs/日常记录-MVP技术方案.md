@@ -2,7 +2,7 @@
 
 > 版本：v0.1
 > 日期：2026-11-17
-> 对应 PRD：[`docs/PRD.md`](./PRD.md) v0.1
+> 对应 PRD：[`docs/PRD-MVP.md`](./PRD-MVP.md) v0.1（已冻结，后续完整版需求另建文件）
 > 状态：待评审，评审通过后进入 M0
 > 形态：Android Chrome 上的可安装 PWA，纯静态、无后端
 
